@@ -1,0 +1,92 @@
+body {
+  width: 280px;
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  padding: 16px;
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+input[type="text"],
+input[type="password"],
+select,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  margin-top: 4px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: background 0.3s;
+}
+
+.btn-start {
+  background: #28a745;
+}
+
+.btn-start:hover {
+  background: #218838;
+}
+
+.btn-stop {
+  background: #dc3545;
+}
+
+.btn-stop:hover {
+  background: #c82333;
+}
+
+#statusMsg {
+  font-size: 11px;
+  color: green;
+  min-height: 14px;
+  margin-top: 8px;
+}
+
+.btn-sync {
+  background: #ff5722;
+  font-size: 12px;
+  padding: 8px;
+}
+
+.btn-sync:hover {
+  background: #e64a19;
+}
+.btn-sync:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}

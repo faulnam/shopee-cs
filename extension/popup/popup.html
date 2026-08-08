@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shopee CS Bot</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Shopee CS Auto-Reply</h1>
+
+
+    <label>
+      Gaya Bahasa
+      <select id="toneType">
+        <option value="ramah">Ramah & Sopan</option>
+        <option value="formal">Formal</option>
+        <option value="santai">Santai / Asik</option>
+        <option value="custom">Custom...</option>
+      </select>
+    </label>
+
+    <label id="customToneContainer" style="display: none;">
+      Spesifikasikan gaya bahasa
+      <input type="text" id="customTone" placeholder="Misal: Pakai banyak emoji" />
+    </label>
+
+    <label>
+      Kecepatan Balas
+      <select id="replySpeed">
+        <option value="fast">Cepat (1-2 dtk)</option>
+        <option value="normal" selected>Normal (3-5 dtk)</option>
+        <option value="slow">Santai (6-10 dtk)</option>
+      </select>
+    </label>
+
+    <label>
+      Catatan / Promo (Info ke AI)
+      <textarea id="extraContext" rows="3" placeholder="Misal: Hari ini promo beli 1 gratis 1."></textarea>
+    </label>
+
+    <button id="mainToggleBtn" class="btn-start">MULAI AUTO-REPLY</button>
+    <p id="statusMsg"></p>
+
+    <hr style="margin-top: 15px; margin-bottom: 15px; border: 0; border-top: 1px solid #ddd;" />
+    
+    <button id="syncBtn" class="btn-sync">SINKRONISASI PRODUK SHOPEE</button>
+    <p id="syncStatusMsg" style="font-size: 12px; margin-top: 5px; text-align: center; color: #555;"></p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
