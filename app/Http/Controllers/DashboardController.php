@@ -132,23 +132,44 @@ class DashboardController extends Controller
     // SYSTEM PROMPT
     // =========================================================================
 
-    public function prompt()
+    public function prompt(\Illuminate\Http\Request $request)
     {
-        $promptPath = resource_path('prompts/system_prompt.md');
-        $promptContent = File::exists($promptPath) ? File::get($promptPath) : '';
-        return view('dashboard.prompt', compact('promptContent'));
+        $prompts = \App\Models\Prompt::all();
+        $selectedPrompt = null;
+        
+        if ($request->has('id')) {
+            $selectedPrompt = \App\Models\Prompt::find($request->id);
+        } else if ($prompts->count() > 0) {
+            $selectedPrompt = $prompts->first();
+        }
+
+        return view('dashboard.prompt', compact('prompts', 'selectedPrompt'));
     }
 
-    public function updatePrompt(Request $request)
+    public function updatePrompt(\Illuminate\Http\Request $request)
     {
         $request->validate([
+            'id' => 'nullable|exists:prompts,id',
+            'name' => 'required|string|max:255',
             'prompt_content' => 'required|string',
         ]);
 
-        $promptPath = resource_path('prompts/system_prompt.md');
-        File::put($promptPath, $request->prompt_content);
+        if ($request->id) {
+            $prompt = \App\Models\Prompt::find($request->id);
+            $prompt->update(['name' => $request->name, 'content' => $request->prompt_content]);
+            $msg = 'Gaya Bahasa berhasil diupdate!';
+        } else {
+            \App\Models\Prompt::create(['name' => $request->name, 'content' => $request->prompt_content]);
+            $msg = 'Gaya Bahasa baru berhasil dibuat!';
+        }
 
-        return back()->with('success', 'System prompt berhasil disimpan!');
+        return redirect()->route('dashboard.prompt')->with('success', $msg);
+    }
+    
+    public function deletePrompt(\App\Models\Prompt $prompt)
+    {
+        $prompt->delete();
+        return redirect()->route('dashboard.prompt')->with('success', 'Gaya Bahasa dihapus!');
     }
 
     // =========================================================================

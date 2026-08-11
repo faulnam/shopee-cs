@@ -32,13 +32,9 @@
             <textarea name="store_policy" rows="5" class="w-full bg-[#121212] border border-[#333] text-white rounded-lg px-4 py-3 focus:outline-none focus:border-[#ee4d2d]" placeholder="Tuliskan kebijakan pengembalian barang, jam buka, dll...">{{ old('store_policy', $settings->store_policy) }}</textarea>
         </div>
 
-        <div class="mb-8 p-4 bg-[#2a2a2a] rounded-lg border border-[#333]">
-            <label class="block text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-                <i data-lucide="mic" class="w-4 h-4"></i> Gaya Bahasa (Tone) CS
-            </label>
-            <input type="text" name="tone" value="{{ old('tone', $settings->tone) }}" 
-                   class="w-full bg-[#121212] border border-[#333] text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-[#ee4d2d]" required>
-            <p class="text-xs text-gray-500 mt-2">Contoh: "ramah dan hangat", "profesional dan to the point", "santai dan banyak emoji"</p>
+        <div class="mb-8 p-4 bg-[#2a2a2a] rounded-lg border border-[#333] hidden">
+            <!-- Tone is now managed in Extension & Prompt settings, we keep this hidden for backward compatibility -->
+            <input type="hidden" name="tone" value="{{ old('tone', $settings->tone) }}">
         </div>
 
         <div class="border-t border-[#2a2a2a] pt-6 flex items-center justify-between">

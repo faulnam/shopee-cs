@@ -16,6 +16,7 @@ class ProductSyncController extends Controller
     {
         $validated = $request->validate([
             'products' => 'required|array',
+            'products.*.shopee_id' => 'nullable|string',
             'products.*.sku' => 'nullable|string|max:255',
             'products.*.nama_produk' => 'required|string|max:500',
             'products.*.harga_normal' => 'required|numeric',
@@ -34,16 +35,15 @@ class ProductSyncController extends Controller
         foreach ($validated['products'] as $productData) {
             
             // Jangan buat link default berupa search keyword karena akan terdeteksi SPAM oleh Shopee
-            if (empty($productData['link_produk'])) {
-                $productData['link_produk'] = null;
-            }
-
             Product::updateOrCreate(
                 // Kriteria pencarian
-                ['nama_produk' => $productData['nama_produk']],
+                [
+                    'shopee_id' => $productData['shopee_id'] ?? ('P_' . $productData['nama_produk'])
+                ],
                 // Data yang diupdate/dibuat
                 [
                     'sku' => $productData['sku'] ?? null,
+                    'nama_produk' => $productData['nama_produk'],
                     'harga_normal' => $productData['harga_normal'],
                     'harga_diskon' => $productData['harga_diskon'] ?? null,
                     'stok' => $productData['stok'],
