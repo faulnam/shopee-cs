@@ -276,13 +276,17 @@ async function sendProductCard(keyword) {
   const searchInput = document.querySelector('input[placeholder*="Cari Nama Produk"]');
   if (searchInput) {
       searchInput.focus();
-      // Hapus value lama (simulasi hapus manual)
-      searchInput.value = '';
-      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
       
-      // Ketik value baru menggunakan document.execCommand untuk React
-      searchInput.focus();
-      document.execCommand('insertText', false, keyword);
+      // Menggunakan native setter agar React menyadari perubahan input
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      
+      // Kosongkan dulu
+      nativeInputValueSetter.call(searchInput, '');
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 300));
+      
+      // Isi dengan keyword baru
+      nativeInputValueSetter.call(searchInput, keyword);
       searchInput.dispatchEvent(new Event('input', { bubbles: true }));
       
       // Tunggu hasil pencarian muncul
@@ -483,7 +487,8 @@ function simulateClick(element) {
         buttons: 1
       }));
     });
-    element.click(); // Standard click as fallback
+    // Hapus element.click() di sini karena dispatchEvent('click') sudah cukup.
+    // Ini mencegah event klik terpicu ganda (dobel produk).
   } catch(e) {
     console.error("Gagal click element", e);
   }
