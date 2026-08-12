@@ -24,6 +24,7 @@ Route::middleware(['admin_auth'])->prefix('dashboard')->name('dashboard.')->grou
     
     Route::get('/prompt', [DashboardController::class, 'prompt'])->name('prompt');
     Route::post('/prompt', [DashboardController::class, 'updatePrompt']);
+    Route::delete('/prompt/{prompt}', [DashboardController::class, 'deletePrompt'])->name('prompt.delete');
     
     Route::get('/conversations', [DashboardController::class, 'conversations'])->name('conversations');
     Route::get('/conversations/{conversation}', [DashboardController::class, 'showConversation'])->name('conversations.show');

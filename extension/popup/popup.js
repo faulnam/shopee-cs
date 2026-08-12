@@ -28,16 +28,54 @@ function updateButtonUI() {
   }
 }
 
+async function fetchPrompts() {
+  try {
+    const res = await fetch("https://shopee.cs.norapade.my.id/api/prompts", {
+      headers: { "Authorization": "Bearer 1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc", "Accept": "application/json" }
+    });
+    if (!res.ok) throw new Error("Gagal ambil prompts");
+    const prompts = await res.json();
+    
+    toneTypeSelect.innerHTML = "";
+    prompts.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name;
+      toneTypeSelect.appendChild(opt);
+    });
+    
+    // Custom fallback if needed
+    const customOpt = document.createElement("option");
+    customOpt.value = "custom";
+    customOpt.textContent = "Custom...";
+    toneTypeSelect.appendChild(customOpt);
+
+  } catch (e) {
+    console.warn("Gagal fetch prompts, menggunakan fallback:", e);
+    toneTypeSelect.innerHTML = `
+      <option value="1">Default (Ramah)</option>
+      <option value="custom">Custom...</option>
+    `;
+  }
+}
+
 async function loadSettings() {
   const settings = await chrome.runtime.sendMessage({ type: "GET_SETTINGS" });
   isAutoReplyEnabled = !!settings.autoReplyEnabled;
-  toneTypeSelect.value = settings.toneType || "ramah";
+  toneTypeSelect.value = settings.toneType || "1";
   customToneInput.value = settings.customTone || "";
   replySpeedSelect.value = settings.replySpeed || "normal";
   extraContextInput.value = settings.extraContext || "";
   toggleCustomTone();
   updateButtonUI();
 }
+
+async function init() {
+  await fetchPrompts();
+  await loadSettings();
+}
+
+init();
 
 async function toggleAutoReply() {
   isAutoReplyEnabled = !isAutoReplyEnabled;
@@ -88,6 +126,8 @@ async function syncProductsInjected() {
     const apiEndpoints = [
       `/api/v3/product/search_product/?page_number=1&page_size=${pageSize}&source=seller_center&sort_by=ctime&sort_direction=2`,
       `/api/v3/product/search_product_v2/?page_number=1&page_size=${pageSize}&source=seller_center`,
+      `/api/v3/product/get_product_list?page_number=1&page_size=${pageSize}`,
+      `/api/v3/mps/get_product_list?page_number=1&page_size=${pageSize}`,
       `/api/mydata/product/get_product_list?offset=0&limit=${pageSize}&need_statistic=true`,
     ];
 
@@ -111,6 +151,7 @@ async function syncProductsInjected() {
         
         apiWorked = true;
         totalPages = Math.ceil(totalCount / pageSize);
+        console.log(`[ShopeeSync] API Berhasil: ${endpoint}. Ditemukan ${totalCount} produk total, ${totalPages} halaman.`);
         
         items.forEach(item => {
           const product = parseApiProduct(item);
@@ -128,7 +169,7 @@ async function syncProductsInjected() {
             const pageData = await pageRes.json();
             const pageItems = pageData?.data?.items || pageData?.data?.list || pageData?.data?.product_list || pageData?.items || [];
             pageItems.forEach(item => { const p = parseApiProduct(item); if (p) allProducts.push(p); });
-          } catch (e) { console.error(`Gagal fetch halaman ${page}:`, e); }
+          } catch (e) { console.error(`[ShopeeSync] Gagal fetch halaman ${page}:`, e); }
         }
         break;
       } catch (e) { continue; }
@@ -136,123 +177,241 @@ async function syncProductsInjected() {
 
     // === METODE 2: Fallback DOM Scraping ===
     if (!apiWorked || allProducts.length === 0) {
+      console.log(`[ShopeeSync] API gagal atau tidak mendapat produk. Jatuh kembali ke DOM Scraping otomatis dengan pagination.`);
       usedMethod = "dom";
-      const seenNames = new Set();
+      const seenIds = new Set();
+      let hasNextPage = true;
+      let pageCount = 0;
+      let lastParentProduct = null;
 
-      // --- Strategi 2a: Cari elemen TERDALAM yang mengandung "ID Produk:" (paling akurat) ---
-      // Kita hanya ambil elemen paling spesifik, bukan parent-parentnya yang juga mengandung teks sama
-      const allElems = document.querySelectorAll('*');
-      const productMarkers = [];
-      allElems.forEach(el => {
-        const text = el.innerText || "";
-        if (!text.includes("ID Produk:")) return;
-        // Skip jika ada child yang juga mengandung "ID Produk:" (artinya ini parent, bukan elemen terdalam)
-        const childHasMarker = Array.from(el.children).some(child => (child.innerText || "").includes("ID Produk:"));
-        if (childHasMarker) return;
-        productMarkers.push(el);
-      });
+      while (hasNextPage && pageCount < 20) {
+        pageCount++;
+        console.log(`[ShopeeSync] Scraping halaman ${pageCount}...`);
 
-      productMarkers.forEach(el => {
-        // el adalah elemen terdalam yang mengandung "ID Produk:"
-        // Cari elemen yang mengandung "ID Produk:" — ini pasti baris produk Shopee
-
-        // Naik ke container terdekat yang memuat seluruh baris produk
-        let container = el;
-        for (let i = 0; i < 8; i++) {
-          if (!container.parentElement) break;
-          container = container.parentElement;
-          // Berhenti jika container sudah cukup besar (mengandung harga Rp)
-          if ((container.innerText || "").match(/Rp\s?[\d.,]+/)) break;
+        if (pageCount > 1) {
+          // Tunggu Shopee merender produk halaman berikutnya
+          await new Promise(r => setTimeout(r, 2500));
         }
 
-        const fullText = container.innerText || "";
-        const lines = fullText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        let itemsScrapedThisPage = 0;
 
-        // Cari nama produk: baris pertama yang bukan SKU/ID/Model/checkbox/header
-        let nama_produk = "";
-        for (const line of lines) {
-          if (line.match(/^(SKU|ID Produk|Model ID|Produk|Harga|Stok|Performa|Akt|Live|Semua|Perlu)/i)) continue;
-          if (line.match(/^(Ubah|Iklankan|Lainnya|Fix|Penjualan|Kunjungan|Masalah)/i)) continue;
-          if (line.match(/^\d+$/) || line.length < 3) continue;
-          if (line.match(/Rp\s?[\d.,]+/)) continue;
-          nama_produk = line;
-          break;
-        }
+        // --- Strategi 2a: Cari elemen TERDALAM yang mengandung "ID Produk:" atau "Model ID:" ---
+        const allElems = document.querySelectorAll('*');
+        const productMarkers = [];
+        allElems.forEach(el => {
+          const text = el.innerText || "";
+          if (!text.includes("ID Produk:") && !text.includes("Model ID:")) return;
+          // Skip jika ada child yang juga mengandung teks marker
+          const childHasMarker = Array.from(el.children).some(child => {
+              const childText = child.innerText || "";
+              return childText.includes("ID Produk:") || childText.includes("Model ID:");
+          });
+          if (childHasMarker) return;
+          productMarkers.push(el);
+        });
 
-        if (!nama_produk || seenNames.has(nama_produk)) return;
-        seenNames.add(nama_produk);
+        productMarkers.forEach(el => {
+          let container = el;
+          for (let i = 0; i < 8; i++) {
+            if (!container.parentElement) break;
+            if (container.parentElement.tagName === 'BODY' || container.parentElement.tagName === 'MAIN') break;
+            container = container.parentElement;
+            if ((container.innerText || "").match(/Rp\s?[\d.,]+/) && container.innerText.length < 1500) break;
+          }
 
-        // Cari harga
-        let harga_normal = 0;
-        const priceMatch = fullText.match(/Rp\s?([\d.,]+)/);
-        if (priceMatch) {
-          harga_normal = parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')) || 0;
-        }
+          const fullText = container.innerText || "";
+          if (fullText.length > 2000) return;
 
-        // Cari stok (angka di dekat kata "Stok" atau angka besar standalone)
-        let stok = 0;
-        const stockMatch = fullText.match(/(?:stok|stock)[:\s]*(\d+)/i);
-        if (stockMatch) {
-          stok = parseInt(stockMatch[1], 10) || 0;
-        } else {
-          // Cari angka standalone yang bukan ID dan bukan harga
+          const lines = fullText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+          let nama_produk = "";
           for (const line of lines) {
-            if (line.match(/^(\d{1,5})$/) && !line.match(/ID/) && parseInt(line) < 100000) {
-              const num = parseInt(line, 10);
-              if (num > 0 && num < 100000 && num !== harga_normal) {
-                stok = num;
-                break;
+            const l = line.trim();
+            // Skip UI labels that are prefixes
+            if (l.match(/^(SKU Induk|ID Produk|Model ID|Kode Variasi|Batas Maks|Lihat Semua)/i)) continue;
+            
+            // Skip Exact UI labels (case insensitive)
+            const exactSkip = ["produk", "harga", "stok", "performa", "aksi", "semua", "live", "perlu tindakan", "sedang ditinjau shopee", "belum ditampilkan", "analisis produk", "ubah", "iklankan", "lainnya", "beranda", "pesanan saya", "produk saya", "tambah produk baru", "optimasi ai", "produk potensial", "habis"];
+            let skipExact = false;
+            for (const skip of exactSkip) {
+                if (l.toLowerCase() === skip || l.toLowerCase().startsWith(skip + " (") || l.toLowerCase().match(new RegExp(`^${skip}\\s*\\d+$`))) {
+                    skipExact = true;
+                    break;
+                }
+            }
+            if (skipExact) continue;
+
+            if (l.match(/^\d+$/) || l.length < 2) continue;
+            if (l.match(/Rp\s?[\d.,]+/)) continue;
+            if (l.match(/penjualan\s*\d+/i)) continue;
+            if (l.match(/kunjungan\s*\d+/i)) continue;
+
+            nama_produk = l;
+            break;
+          }
+
+          if (!nama_produk) return;
+
+          let harga_normal = 0;
+          const priceMatch = fullText.match(/Rp\s?([\d.,]+)/);
+          if (priceMatch) {
+            harga_normal = parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')) || 0;
+          }
+
+          let stok = 0;
+          const stockMatch = fullText.match(/(?:stok|stock|habis)[:\s]*(\d+)/i);
+          if (stockMatch) {
+            stok = parseInt(stockMatch[1], 10) || 0;
+          } else if (fullText.toLowerCase().includes('habis')) {
+            stok = 0;
+          } else {
+            for (const line of lines) {
+              if (line.match(/^(\d{1,5})$/) && !line.match(/ID/) && parseInt(line) < 100000) {
+                const num = parseInt(line, 10);
+                if (num > 0 && num < 100000 && num !== harga_normal) {
+                  stok = num;
+                  break;
+                }
               }
             }
           }
+
+          let sku = "";
+          const skuMatch = fullText.match(/SKU[^:]*:\s*(.+)/i);
+          if (skuMatch) sku = skuMatch[1].split('\n')[0].trim();
+
+          let jumlah_terjual = 0;
+          const soldMatch = fullText.match(/Penjualan\s+(\d+)/i);
+          if (soldMatch) jumlah_terjual = parseInt(soldMatch[1], 10) || 0;
+
+          const isParent = fullText.includes("ID Produk:");
+          
+          // Gunakan ID unik untuk mencegah duplikasi (karena nama produk bisa sama)
+          let uniqueId = "";
+          if (isParent) {
+              const idm = fullText.match(/ID Produk:\s*(\d+)/i);
+              uniqueId = idm ? "P_" + idm[1] : "P_" + nama_produk;
+          } else {
+              const idm = fullText.match(/Model ID:\s*(\d+)/i);
+              uniqueId = idm ? "V_" + idm[1] : "V_" + nama_produk;
+          }
+          
+          if (seenIds.has(uniqueId)) return;
+          seenIds.add(uniqueId);
+          
+          if (isParent) {
+            const newProduct = {
+              shopee_id: uniqueId,
+              nama_produk: nama_produk,
+              sku: sku || undefined,
+              harga_normal: harga_normal,
+              harga_diskon: null,
+              stok: stok,
+              jumlah_terjual: jumlah_terjual,
+              kategori: "Katalog Shopee",
+              deskripsi_singkat: "",
+              link_produk: `https://shopee.co.id/product/0/${uniqueId.replace(/^(P|V)_/, '')}`,
+              varian_tersedia: []
+            };
+            
+            allProducts.push(newProduct);
+            lastParentProduct = newProduct;
+            itemsScrapedThisPage++;
+          } else {
+            // It's a variation
+            if (lastParentProduct) {
+              lastParentProduct.varian_tersedia.push({
+                nama: nama_produk,
+                harga: harga_normal,
+                stok: stok,
+                sku: sku || undefined
+              });
+              itemsScrapedThisPage++;
+            }
+          }
+        });
+
+        // --- Strategi 2b: Fallback table row jika 2a gagal ---
+        if (itemsScrapedThisPage === 0) {
+          const productRows = document.querySelectorAll('table tbody tr');
+          productRows.forEach(row => {
+            try {
+              const cells = row.querySelectorAll('td');
+              if (cells.length < 3) return;
+              const productCell = cells[0] || cells[1];
+              const nameEl = productCell.querySelector('a, [class*="name"], .product-name') || productCell;
+              const nama_produk = nameEl ? nameEl.innerText.split('\n')[0].trim() : "";
+              if (!nama_produk || nama_produk.length < 3 || seenIds.has(nama_produk)) return;
+              
+              const rowText = row.innerText || "";
+              if (!rowText.match(/Rp\s?[\d.,]+/)) return;
+              
+              seenIds.add(nama_produk);
+              
+              let harga_normal = 0;
+              const priceMatch = rowText.match(/Rp\s?([\d.,]+)/);
+              if (priceMatch) harga_normal = parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')) || 0;
+              
+              let stok = 0;
+              if (cells[2]) stok = parseInt(cells[2].innerText.replace(/[^0-9]/g, ''), 10) || 0;
+              
+              allProducts.push({
+                shopee_id: "P_" + nama_produk,
+                nama_produk,
+                harga_normal,
+                harga_diskon: null,
+                stok,
+                jumlah_terjual: 0,
+                kategori: "Katalog Shopee",
+                deskripsi_singkat: "",
+                varian_tersedia: []
+              });
+              itemsScrapedThisPage++;
+            } catch (e) { /* skip */ }
+          });
         }
 
-        // Cari SKU
-        let sku = "";
-        const skuMatch = fullText.match(/SKU[^:]*:\s*(.+)/i);
-        if (skuMatch) sku = skuMatch[1].split('\n')[0].trim();
+        if (itemsScrapedThisPage === 0) {
+            console.log("[ShopeeSync] Tidak ada produk baru di halaman ini. Selesai scraping DOM.");
+            break;
+        }
 
-        // Cari jumlah terjual
-        let jumlah_terjual = 0;
-        const soldMatch = fullText.match(/Penjualan\s+(\d+)/i);
-        if (soldMatch) jumlah_terjual = parseInt(soldMatch[1], 10) || 0;
+        // --- Coba cari tombol "Next" untuk ke halaman berikutnya ---
+        hasNextPage = false;
+        const allBtns = Array.from(document.querySelectorAll('button'));
+        
+        let nextBtn = null;
+        for (const btn of allBtns) {
+            // Abaikan tombol yang disabled
+            if (btn.disabled || btn.classList.contains('disabled') || btn.getAttribute('disabled') !== null) continue;
+            
+            const parentText = btn.parentElement ? (btn.parentElement.innerText || "") : "";
+            
+            // Cek apakah tombol ini berada di dekat teks indikator halaman (contoh: "1 / 2")
+            if (parentText.match(/\d+\s*\/\s*\d+/)) {
+                // Biasanya tombol Next adalah tombol terakhir di container pagination
+                const siblingBtns = btn.parentElement.querySelectorAll('button');
+                if (siblingBtns.length >= 2 && siblingBtns[siblingBtns.length - 1] === btn) {
+                    nextBtn = btn;
+                    break;
+                }
+                
+                // Atau mencari ikon panah kanan
+                if (btn.innerHTML.includes('right') || btn.innerHTML.includes('M10 5L15 10L10 15')) {
+                    nextBtn = btn;
+                    break;
+                }
+            }
+        }
 
-        allProducts.push({
-          sku,
-          nama_produk,
-          harga_normal,
-          harga_diskon: null,
-          stok,
-          jumlah_terjual,
-          kategori: "Katalog Shopee",
-          deskripsi_singkat: "",
-        });
-      });
-
-      // --- Strategi 2b: Fallback table row jika 2a gagal ---
-      if (allProducts.length === 0) {
-        const productRows = document.querySelectorAll('table tbody tr');
-        productRows.forEach(row => {
-          try {
-            const cells = row.querySelectorAll('td');
-            if (cells.length < 3) return;
-            const productCell = cells[0] || cells[1];
-            const nameEl = productCell.querySelector('a, [class*="name"], .product-name') || productCell;
-            const nama_produk = nameEl ? nameEl.innerText.split('\n')[0].trim() : "";
-            if (!nama_produk || nama_produk.length < 3 || seenNames.has(nama_produk)) return;
-            // Harus ada harga Rp di baris ini, kalau tidak maka ini bukan baris produk
-            const rowText = row.innerText || "";
-            if (!rowText.match(/Rp\s?[\d.,]+/)) return;
-            seenNames.add(nama_produk);
-            let harga_normal = 0;
-            const priceMatch = rowText.match(/Rp\s?([\d.,]+)/);
-            if (priceMatch) harga_normal = parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')) || 0;
-            let stok = 0;
-            if (cells[2]) stok = parseInt(cells[2].innerText.replace(/[^0-9]/g, ''), 10) || 0;
-            allProducts.push({ nama_produk, harga_normal, harga_diskon: null, stok, jumlah_terjual: 0, kategori: "Katalog Shopee", deskripsi_singkat: "" });
-          } catch (e) { /* skip */ }
-        });
-      }
+        if (nextBtn) {
+            console.log("[ShopeeSync] Menemukan tombol Next, pindah ke halaman berikutnya...");
+            nextBtn.click();
+            hasNextPage = true;
+        } else {
+            console.log("[ShopeeSync] Tombol Next tidak ditemukan atau sedang di halaman terakhir.");
+        }
+      } // end while loop
     }
   } catch (e) {
     return { success: false, error: "Gagal mengambil data produk: " + e.message };
@@ -264,14 +423,22 @@ async function syncProductsInjected() {
 
   // Kirim ke backend Laravel
   try {
-    const res = await fetch("https://shopee.cs.norapadel.my.id/api/products/sync", {
+    const res = await fetch("https://shopee.cs.norapade.my.id/api/products/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer 1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc" },
       body: JSON.stringify({ products: allProducts }),
     });
     if (!res.ok) return { success: false, error: `Gagal mengirim ke server (Error ${res.status}). Pastikan php artisan serve berjalan.` };
     const data = await res.json();
-    return { success: true, count: allProducts.length, pages: totalPages, method: usedMethod, message: data.message };
+    
+    let variationsCount = 0;
+    allProducts.forEach(p => {
+        if (p.varian_tersedia && p.varian_tersedia.length > 0) {
+            variationsCount += p.varian_tersedia.length;
+        }
+    });
+    
+    return { success: true, count: allProducts.length, variations: variationsCount, pages: totalPages, method: usedMethod, message: data.message };
   } catch (e) {
     return { success: false, error: "Gagal terhubung ke server backend: " + e.message + ". Pastikan php artisan serve berjalan." };
   }
@@ -321,26 +488,31 @@ async function triggerSync() {
     const response = results[0]?.result;
 
     if (response && response.success) {
-      const methodInfo = response.method === "api" ? " (via API)" : " (via halaman)";
-      const pageInfo = response.pages > 1 ? ` dari ${response.pages} halaman` : "";
-      syncStatusMsg.textContent = `✅ Berhasil sinkronisasi ${response.count} produk${pageInfo}${methodInfo}!`;
+      syncStatusMsg.style.display = "block";
       syncStatusMsg.style.color = "green";
-    } else if (response) {
-      syncStatusMsg.textContent = `❌ Gagal: ${response.error}`;
-      syncStatusMsg.style.color = "#dc3545";
+      
+      let varianText = (response.variations && response.variations > 0) ? ` dan ${response.variations} variasi` : "";
+      syncStatusMsg.innerHTML = `✓ Berhasil sinkronisasi ${response.count} produk${varianText} (via ${response.method === "api" ? "API" : "halaman"})!`;
+      
+      setTimeout(() => {
+        syncStatusMsg.style.display = "none";
+      }, 5000);
     } else {
-      syncStatusMsg.textContent = "❌ Gagal: Tidak ada respon dari halaman.";
+      syncStatusMsg.style.display = "block";
       syncStatusMsg.style.color = "#dc3545";
+      syncStatusMsg.innerHTML = `❌ Gagal: ${response?.error || 'Error tidak diketahui'}`;
     }
   } catch (error) {
-    syncStatusMsg.textContent = "❌ Error: " + error.message;
-    syncStatusMsg.style.color = "#dc3545";
-  } finally {
     syncBtn.disabled = false;
     syncBtn.textContent = "SINKRONISASI PRODUK SHOPEE";
-    setTimeout(() => {
-      if (syncStatusMsg.textContent.includes("Berhasil")) syncStatusMsg.textContent = "";
-    }, 8000);
+    syncStatusMsg.style.display = "block";
+    syncStatusMsg.style.color = "#dc3545";
+    syncStatusMsg.innerHTML = `❌ Error: ${error.message}`;
+  } finally {
+    if (syncBtn.disabled) {
+        syncBtn.disabled = false;
+        syncBtn.textContent = "SINKRONISASI PRODUK SHOPEE";
+    }
   }
 }
 

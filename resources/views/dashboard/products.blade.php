@@ -27,20 +27,49 @@
             </thead>
             <tbody class="divide-y divide-[#2a2a2a]">
                 @forelse($products as $product)
-                <tr class="hover:bg-[#222] transition-colors">
+                <tr class="hover:bg-[#252525] transition-colors group">
                     <td class="px-6 py-4">
-                        <div class="font-medium text-white mb-1 truncate max-w-sm" title="{{ $product->nama_produk }}">{{ $product->nama_produk }}</div>
-                        <div class="text-xs text-gray-500 flex gap-3">
-                            <span>SKU: {{ $product->sku ?: '-' }}</span>
-                            @if($product->link_produk)
-                                <a href="{{ $product->link_produk }}" target="_blank" class="text-blue-400 hover:underline inline-flex items-center gap-1">
-                                    <i data-lucide="external-link" class="w-3 h-3"></i> Link
+                        <div class="flex flex-col">
+                            <span class="text-sm font-medium text-white mb-1" title="{{ $product->nama_produk }}">{{ Str::limit($product->nama_produk, 50) }}</span>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs text-gray-500 font-mono flex items-center gap-1">
+                                    <i data-lucide="tag" class="w-3 h-3"></i> {{ $product->sku ?: 'No SKU' }}
+                                </span>
+                                @if(is_array($product->varian_tersedia) && count($product->varian_tersedia) > 0)
+                                <span class="px-2 py-0.5 rounded-full bg-[#ee4d2d20] text-[#ee4d2d] text-xs font-medium border border-[#ee4d2d30]">
+                                    {{ count($product->varian_tersedia) }} Variasi
+                                </span>
+                                @endif
+                                @if($product->link_produk)
+                                <a href="{{ $product->link_produk }}" target="_blank" class="text-blue-400 hover:underline inline-flex items-center gap-1 text-xs">
+                                    <i data-lucide="external-link" class="w-3 h-3"></i>
                                 </a>
+                                @endif
+                            </div>
+                            
+                            @if(is_array($product->varian_tersedia) && count($product->varian_tersedia) > 0)
+                            <div class="mt-3 hidden group-hover:block bg-[#1a1a1a] rounded-lg border border-[#333] p-3 shadow-lg absolute z-50">
+                                <p class="text-xs font-semibold text-gray-400 mb-2">Detail Variasi:</p>
+                                <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
+                                    @foreach($product->varian_tersedia as $var)
+                                    <div class="flex justify-between items-center text-sm bg-[#121212] p-2 rounded border border-[#2a2a2a] gap-4">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-2 h-2 rounded-full bg-[#ee4d2d]"></span>
+                                            <span class="text-gray-300">{{ is_string($var) ? $var : ($var['nama'] ?? 'Unknown') }}</span>
+                                        </div>
+                                        <div class="flex gap-4 text-xs">
+                                            <span class="text-gray-400">Stok: <span class="text-white">{{ is_array($var) ? ($var['stok'] ?? 0) : '-' }}</span></span>
+                                            <span class="text-[#ee4d2d] font-medium whitespace-nowrap">Rp {{ number_format(is_array($var) ? ($var['harga'] ?? 0) : 0, 0, ',', '.') }}</span>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+                            </div>
                             @endif
                         </div>
                     </td>
                     <td class="px-6 py-4">
-                        <span class="px-2 py-1 bg-[#2a2a2a] rounded text-xs">{{ $product->kategori ?: 'Uncategorized' }}</span>
+                        <span class="px-2 py-1 bg-[#2a2a2a] rounded text-xs text-gray-300">{{ $product->kategori ?: 'Uncategorized' }}</span>
                     </td>
                     <td class="px-6 py-4 text-right">
                         @if($product->harga_diskon)
@@ -51,33 +80,43 @@
                         @endif
                     </td>
                     <td class="px-6 py-4 text-center">
-                        @if($product->stok > 0)
-                            <span class="px-2 py-1 bg-green-500/10 text-green-400 rounded text-xs">{{ $product->stok }}</span>
-                        @else
-                            <span class="px-2 py-1 bg-red-500/10 text-red-400 rounded text-xs">Habis</span>
-                        @endif
+                        @php
+                            $totalStok = $product->stok;
+                            if(is_array($product->varian_tersedia) && count($product->varian_tersedia) > 0) {
+                                $totalStok = collect($product->varian_tersedia)->sum(function($var) {
+                                    return is_array($var) ? ($var['stok'] ?? 0) : 0;
+                                });
+                                $totalStok = max($totalStok, $product->stok);
+                            }
+                        @endphp
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium {{ $totalStok > 10 ? 'bg-green-500/10 text-green-500' : ($totalStok > 0 ? 'bg-yellow-500/10 text-yellow-500' : 'bg-red-500/10 text-red-500') }}">
+                            <span class="w-1.5 h-1.5 rounded-full {{ $totalStok > 10 ? 'bg-green-500' : ($totalStok > 0 ? 'bg-yellow-500' : 'bg-red-500') }}"></span>
+                            {{ $totalStok }} Unit
+                        </span>
                     </td>
                     <td class="px-6 py-4 text-right">
-                        <button type="button" onclick="editProduct({{ $product->toJson() }})" class="text-blue-400 hover:text-blue-300 p-2" title="Edit">
-                            <i data-lucide="edit-2" class="w-4 h-4"></i>
-                        </button>
-                        <form action="{{ route('dashboard.products.destroy', $product) }}" method="POST" class="inline-block" onsubmit="return confirm('Hapus produk ini?');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" class="text-red-400 hover:text-red-300 p-2" title="Hapus">
-                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        <div class="flex items-center justify-end gap-2">
+                            <button onclick="editProduct({{ $product->id }})" class="p-2 text-gray-400 hover:text-white hover:bg-[#333] rounded-lg transition-colors" title="Edit Data">
+                                <i data-lucide="edit-2" class="w-4 h-4"></i>
                             </button>
-                        </form>
+                            <form action="{{ route('dashboard.products.destroy', $product->id) }}" method="POST" class="inline" onsubmit="return confirm('Yakin ingin menghapus produk ini?');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors" title="Hapus Produk">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="5" class="px-6 py-12 text-center text-gray-500">
-                        <div class="flex flex-col items-center justify-center">
-                            <i data-lucide="package-x" class="w-12 h-12 mb-3 text-[#333]"></i>
-                            <p>Belum ada produk yang disinkronisasi.</p>
-                            <p class="text-sm mt-1">Buka halaman seller Shopee dan klik "Sync Data" di ekstensi.</p>
+                    <td colspan="5" class="px-6 py-12 text-center">
+                        <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#2a2a2a] mb-4">
+                            <i data-lucide="package-x" class="w-6 h-6 text-gray-400"></i>
                         </div>
+                        <h3 class="text-sm font-medium text-white mb-1">Belum Ada Produk</h3>
+                        <p class="text-xs text-gray-500">Sinkronkan produk dari Shopee Seller Center menggunakan ekstensi Chrome.</p>
                     </td>
                 </tr>
                 @endforelse

@@ -36,9 +36,9 @@ return [
     ],
 
     'openrouter' => [
-        'key' => env('OPENROUTER_API_KEY'),
-        'model' => env('OPENROUTER_MODEL', 'deepseek/deepseek-chat'),
-        'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+        'key' => env('OPENROUTER_API_KEY', env('NINEROUTER_API_KEY')),
+        'model' => env('OPENROUTER_MODEL', env('NINEROUTER_MODEL', 'deepseek/deepseek-chat')),
+        'base_url' => env('OPENROUTER_BASE_URL', env('NINEROUTER_BASE_URL', 'https://openrouter.ai/api/v1')),
     ],
 
 ];

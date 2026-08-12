@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Product extends Model
 {
     protected $fillable = [
+        'shopee_id',
         'sku',
         'nama_produk',
         'harga_normal',

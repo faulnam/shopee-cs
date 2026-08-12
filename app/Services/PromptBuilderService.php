@@ -21,7 +21,17 @@ class PromptBuilderService
      */
     public function build(array $data): string
     {
-        $template = file_get_contents(resource_path('prompts/system_prompt.md'));
+        // $data['tone'] is now the ID of the prompt
+        $promptId = $data['tone'];
+        $prompt = \App\Models\Prompt::find($promptId);
+        
+        // Fallback to the first prompt or a default message if not found
+        if ($prompt) {
+            $template = $prompt->content;
+        } else {
+            $firstPrompt = \App\Models\Prompt::first();
+            $template = $firstPrompt ? $firstPrompt->content : 'Gagal memuat prompt.';
+        }
 
         $replacements = [
             '{store_name}' => $data['store_name'],

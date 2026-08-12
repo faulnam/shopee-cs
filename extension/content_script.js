@@ -134,16 +134,42 @@ function getLatestCustomerMessage(history) {
 
 function getConversationIdFromUrl() {
   const match = window.location.href.match(/conversation[_-]?id=([\w-]+)/i);
-  return match ? match[1] : window.location.pathname;
+  if (match) return match[1];
+
+  // Fallback if URL doesn't contain conversation_id (common in SPAs like Shopee Webchat)
+  const customerName = getCustomerName();
+  // Create a unique ID based on customer name so each user has their own chat history
+  return "chat_" + customerName.replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
 }
 
 function getCustomerName() {
   const el = document.querySelector(SELECTORS.customerName);
-  return el ? el.innerText.trim() : "Kakak";
+  let name = el ? el.innerText.trim() : "";
+  
+  if (!name || name === "Kakak") {
+      // Fallback: cari di dalam item chat yang sedang aktif di sebelah kiri
+      const activeChatItem = document.querySelector('.shopee-chat__chat-list__chat-item--active [class*="nickname"], [class*="chat-item"][class*="active"] [class*="nickname"]');
+      if (activeChatItem && activeChatItem.innerText.trim().length > 0) {
+          name = activeChatItem.innerText.trim();
+      } else {
+          // Fallback kedua: cari elemen teks tebal di header chat tengah
+          const header = document.querySelector('[class*="header"] [class*="name"], [class*="header"] span, .conversation-header span');
+          if (header && header.innerText.length > 0) {
+              name = header.innerText.trim();
+          }
+      }
+  }
+  
+  // Shopee webchat punya tab default 'Semua Chat' tanpa percakapan terpilih
+  if (name.includes("Belum Dibalas") || name.includes("Semua Chat")) {
+      name = "Tanpa Nama";
+  }
+  
+  return name || "Kakak";
 }
 
 async function sendToBackend(settings, customerMessage, history, conversationId, customerName) {
-  const backendUrl = "https://shopee.cs.norapadel.my.id/api/reply";
+  const backendUrl = "https://shopee.cs.norapade.my.id/api/reply";
   const apiToken = "1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc";
   
   const requestTone = settings.toneType === 'custom' ? settings.customTone : settings.toneType;
@@ -197,14 +223,14 @@ function injectAndSend(replyText, speedOption) {
         inputBox.focus();
         document.execCommand("insertText", false, replyText);
 
-        let baseDelay = 3000;
-        let randomAdd = 2000;
+        let baseDelay = 1000;
+        let randomAdd = 1000;
         if (speedOption === 'fast') {
-            baseDelay = 1000;
-            randomAdd = 1000; // 1-2 dtk
+            baseDelay = 500;
+            randomAdd = 500; // 0.5-1 dtk
         } else if (speedOption === 'slow') {
-            baseDelay = 6000;
-            randomAdd = 4000; // 6-10 dtk
+            baseDelay = 2000;
+            randomAdd = 2000; // 2-4 dtk
         }
         
         const finalDelay = baseDelay + Math.random() * randomAdd;
@@ -218,7 +244,7 @@ function injectAndSend(replyText, speedOption) {
             });
             inputBox.dispatchEvent(enterEvent);
           }
-          isProcessing = false;
+          // isProcessing = false; // Dihapus, akan dihandle oleh try...finally di handleNewMessages
           resolve(true);
         }, finalDelay);
       }
@@ -227,49 +253,151 @@ function injectAndSend(replyText, speedOption) {
   });
 }
 
+async function sendProductCard(keyword) {
+  console.log("[ShopeeCSBot] Memulai pengiriman kartu produk untuk:", keyword);
+  
+  // 1. Klik tab "PRODUK"
+  const tabs = Array.from(document.querySelectorAll('div, span, button'));
+  const produkTab = tabs.find(el => el.innerText && el.innerText.trim() === 'PRODUK');
+  if (produkTab) {
+      simulateClick(produkTab);
+      await new Promise(r => setTimeout(r, 500));
+  }
+  
+  // 2. Klik tab "Semua" di dalam panel Produk
+  const subTabs = Array.from(document.querySelectorAll('div, span, button'));
+  const semuaTab = subTabs.find(el => el.innerText && el.innerText.trim() === 'Semua' && el.children.length === 0);
+  if (semuaTab) {
+      simulateClick(semuaTab);
+      await new Promise(r => setTimeout(r, 1000));
+  }
+  
+  // 3. Ketik di "Cari Nama Produk"
+  const searchInput = document.querySelector('input[placeholder*="Cari Nama Produk"]');
+  if (searchInput) {
+      searchInput.focus();
+      
+      // Menggunakan native setter agar React menyadari perubahan input
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+      
+      // Kosongkan dulu
+      nativeInputValueSetter.call(searchInput, '');
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 300));
+      
+      // Isi dengan keyword baru
+      nativeInputValueSetter.call(searchInput, keyword);
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+      
+      // Tunggu hasil pencarian muncul
+      await new Promise(r => setTimeout(r, 2000));
+  } else {
+      console.warn("[ShopeeCSBot] Kolom pencarian produk tidak ditemukan!");
+      return;
+  }
+  
+  // 4. Klik tombol "Kirim"
+  const allKirim = Array.from(document.querySelectorAll('button, span, div'))
+      .filter(el => el.innerText && el.innerText.trim() === 'Kirim' && el.children.length === 0);
+  
+  if (allKirim.length > 0) {
+      console.log(`[ShopeeCSBot] Ditemukan ${allKirim.length} tombol Kirim. Mengklik maksimal 3 produk unik.`);
+      let count = 0;
+      const clickedY = new Set();
+      
+      for (let btn of allKirim) {
+          if (count >= 1) break; // Hanya kirim 1 produk saja
+          const rect = btn.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue; // Elemen tersembunyi
+          
+          const yPos = Math.round(rect.top);
+          
+          // Cek apakah ada tombol lain di baris (Y) yang sama yang sudah diklik
+          let isDuplicate = false;
+          for (let prevY of clickedY) {
+              if (Math.abs(prevY - yPos) < 15) { // Toleransi 15px
+                  isDuplicate = true;
+                  break;
+              }
+          }
+          
+          if (!isDuplicate) {
+              simulateClick(btn);
+              clickedY.add(yPos);
+              count++;
+              await new Promise(r => setTimeout(r, 800)); // jeda antar kirim
+          }
+      }
+  } else {
+      console.warn("[ShopeeCSBot] Tombol Kirim tidak ditemukan untuk pencarian ini.");
+  }
+}
+
 // =========================================================================
 // HANDLE NEW MESSAGES - Proses pesan baru di percakapan yang sedang dibuka
 // =========================================================================
 async function handleNewMessages() {
   if (isProcessing || isHumanHandoverActive()) return false;
-  if (!isExtensionContextValid()) return false;
-
-  const settings = await getSettings();
-  if (!settings || !settings.autoReplyEnabled) return false;
-
-  const history = extractChatHistory();
-  const latest = getLatestCustomerMessage(history);
-
-  if (!latest || latest.text === lastProcessedMessage) return false;
-
-  // Cek apakah pesan terakhir di history sudah dari bot (artinya sudah dibalas)
-  if (history.length > 0 && history[history.length - 1].sender === 'bot') {
-    lastProcessedMessage = latest.text;
-    return false; // Sudah dibalas
-  }
-
-  isProcessing = true;
-  lastProcessedMessage = latest.text;
-
+  isProcessing = true; // Langsung kunci state di awal fungsi (sync) untuk mencegah race condition
+  
   try {
+    if (!isExtensionContextValid()) return false;
+
+    const settings = await getSettings();
+    if (!settings || !settings.autoReplyEnabled) return false;
+
+    const history = extractChatHistory();
+    const latest = getLatestCustomerMessage(history);
+
+    if (!latest || latest.text === lastProcessedMessage) return false;
+
+    // Cek apakah pesan terakhir di history sudah dari bot (artinya sudah dibalas)
+    if (history.length > 0 && history[history.length - 1].sender === 'bot') {
+      lastProcessedMessage = latest.text;
+      return false; // Sudah dibalas
+    }
+
+    lastProcessedMessage = latest.text;
+
     const conversationId = getConversationIdFromUrl();
     const customerName = getCustomerName();
     
     const reply = await sendToBackend(settings, latest.text, history, conversationId, customerName);
     if (reply) {
-      await injectAndSend(reply, settings.replySpeed || 'normal');
+      let textToType = reply;
+      let productKeyword = null;
+      
+      const productMatch = reply.match(/\[SEND_PRODUCT:\s*(.+?)\]/i);
+      if (productMatch) {
+          productKeyword = productMatch[1].trim();
+          textToType = reply.replace(productMatch[0], '').trim();
+      }
+
+      if (textToType.length > 0) {
+          const success = await injectAndSend(textToType, settings.replySpeed || 'normal');
+          if (!success) {
+             return false;
+          }
+      } else {
+          await new Promise(r => setTimeout(r, 1000));
+      }
+      
+      if (productKeyword) {
+          await sendProductCard(productKeyword);
+      }
+
       // Tandai percakapan ini sudah dibalas
       repliedConversations.add(conversationId);
       log({ level: "info", message: `Balasan terkirim ke ${customerName}`, reply });
       return true;
     } else {
-      isProcessing = false;
       return false;
     }
   } catch (err) {
     log({ level: "error", message: "Gagal memproses balasan", error: String(err) });
-    isProcessing = false;
     return false;
+  } finally {
+    isProcessing = false; // Pastikan lock selalu dilepas pada akhirnya
   }
 }
 
@@ -290,15 +418,24 @@ function findUnrepliedChatItems() {
       const potentialBadges = root.querySelectorAll('div, span');
       
       for (let el of potentialBadges) {
+        const className = (el.className || '').toString().toLowerCase();
         const text = el.innerText ? el.innerText.trim() : '';
+        
+        let isBadge = className.includes('unread') || className.includes('badge') || className.includes('notify');
+        
         if (text.match(/^\d+$/) && text.length < 4) {
           const style = window.getComputedStyle(el);
           // Cek warna merah Shopee (#EE4D2D -> rgb(238, 77, 45))
-          if (style.backgroundColor === 'rgb(238, 77, 45)' || 
-              style.backgroundColor === 'rgb(255, 66, 79)') {
-              isUnread = true;
-              break;
+          if (style.backgroundColor.includes('238, 77, 45') || 
+              style.backgroundColor.includes('255, 66, 79') ||
+              style.color.includes('238, 77, 45')) {
+              isBadge = true;
           }
+        }
+        
+        if (isBadge && (text === '' || text.match(/^\d+$/))) {
+            isUnread = true;
+            break;
         }
       }
 
@@ -350,7 +487,8 @@ function simulateClick(element) {
         buttons: 1
       }));
     });
-    element.click(); // Standard click as fallback
+    // Hapus element.click() di sini karena dispatchEvent('click') sudah cukup.
+    // Ini mencegah event klik terpicu ganda (dobel produk).
   } catch(e) {
     console.error("Gagal click element", e);
   }

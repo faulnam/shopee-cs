@@ -64,8 +64,13 @@ class ReplyController extends Controller
         }
 
         $conversation = Conversation::firstOrCreate(
-            ['platform_chat_id' => $validated['conversation_id']]
+            ['platform_chat_id' => $validated['conversation_id']],
+            ['customer_name' => $validated['customer_name'] ?? 'Pelanggan']
         );
+
+        if (!empty($validated['customer_name']) && $conversation->customer_name !== $validated['customer_name']) {
+            $conversation->update(['customer_name' => $validated['customer_name']]);
+        }
 
         Message::create([
             'conversation_id' => $conversation->id,
