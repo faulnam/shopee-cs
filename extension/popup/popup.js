@@ -428,7 +428,7 @@ async function syncProductsInjected() {
       headers: { "Content-Type": "application/json", "Authorization": "Bearer 1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc" },
       body: JSON.stringify({ products: allProducts }),
     });
-    if (!res.ok) return { success: false, error: `Gagal mengirim ke server (Error ${res.status}). Pastikan php artisan serve berjalan.` };
+    if (!res.ok) return { success: false, error: `Gagal mengirim ke server (Error ${res.status}). Pastikan backend berjalan dan URL di extension benar.` };
     const data = await res.json();
     
     let variationsCount = 0;
@@ -440,7 +440,7 @@ async function syncProductsInjected() {
     
     return { success: true, count: allProducts.length, variations: variationsCount, pages: totalPages, method: usedMethod, message: data.message };
   } catch (e) {
-    return { success: false, error: "Gagal terhubung ke server backend: " + e.message + ". Pastikan php artisan serve berjalan." };
+    return { success: false, error: "Gagal terhubung ke server backend: " + e.message + ". Pastikan backend berjalan dan URL di extension benar." };
   }
 }
 
