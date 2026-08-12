@@ -425,10 +425,14 @@ async function syncProductsInjected() {
   try {
     const res = await fetch("https://shopee.cs.norapadel.my.id/api/products/sync", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer 1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc" },
+      headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": "Bearer 1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc" },
       body: JSON.stringify({ products: allProducts }),
     });
-    if (!res.ok) return { success: false, error: `Gagal mengirim ke server (Error ${res.status}). Pastikan backend berjalan dan URL di extension benar.` };
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.message || errData.error || await res.text().catch(() => "") || "Unknown error";
+        return { success: false, error: `Gagal mengirim (Error ${res.status}): ${errMsg}` };
+    }
     const data = await res.json();
     
     let variationsCount = 0;
