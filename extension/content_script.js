@@ -169,7 +169,7 @@ function getCustomerName() {
 }
 
 async function sendToBackend(settings, customerMessage, history, conversationId, customerName) {
-  const backendUrl = "https://shopee.cs.norapade.my.id/api/reply";
+  const backendUrl = "https://shopee.cs.norapadel.my.id/api/reply";
   const apiToken = "1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc";
   
   const requestTone = settings.toneType === 'custom' ? settings.customTone : settings.toneType;
