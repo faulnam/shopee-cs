@@ -30,7 +30,7 @@ function updateButtonUI() {
 
 async function fetchPrompts() {
   try {
-    const res = await fetch("http://127.0.0.1:8000/api/prompts", {
+    const res = await fetch("https://shopee.cs.norapade.my.id/api/prompts", {
       headers: { "Authorization": "Bearer 1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc", "Accept": "application/json" }
     });
     if (!res.ok) throw new Error("Gagal ambil prompts");
@@ -423,7 +423,7 @@ async function syncProductsInjected() {
 
   // Kirim ke backend Laravel
   try {
-    const res = await fetch("http://127.0.0.1:8000/api/products/sync", {
+    const res = await fetch("https://shopee.cs.norapade.my.id/api/products/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer 1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc" },
       body: JSON.stringify({ products: allProducts }),
