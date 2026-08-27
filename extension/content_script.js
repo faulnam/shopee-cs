@@ -74,10 +74,12 @@ async function getSettings() {
   }
   try {
     const settings = await chrome.storage.local.get([
-      'autoReplyEnabled', 'toneType', 'customTone', 'replySpeed', 'extraContext'
+      'autoReplyEnabled', 'serverEnv', 'customServerUrl', 'toneType', 'customTone', 'replySpeed', 'extraContext'
     ]);
     return {
       autoReplyEnabled: settings.autoReplyEnabled ?? false,
+      serverEnv: settings.serverEnv ?? 'https://shopee.cs.norapadel.my.id',
+      customServerUrl: settings.customServerUrl ?? 'http://127.0.0.1:8000',
       toneType: settings.toneType ?? 'ramah',
       customTone: settings.customTone ?? '',
       replySpeed: settings.replySpeed ?? 'normal',
@@ -169,7 +171,8 @@ function getCustomerName() {
 }
 
 async function sendToBackend(settings, customerMessage, history, conversationId, customerName) {
-  const backendUrl = "https://shopee.cs.norapadel.my.id/api/reply";
+  const baseUrl = (settings.serverEnv === 'custom' ? (settings.customServerUrl || "http://127.0.0.1:8000") : (settings.serverEnv || "https://shopee.cs.norapadel.my.id")).replace(/\/+$/, '');
+  const backendUrl = `${baseUrl}/api/reply`;
   const apiToken = "1|L70K2sZN7LpBhUDiBYcqFKglwqzU0Kuo4ZdlTDbR753469dc";
   
   const requestTone = settings.toneType === 'custom' ? settings.customTone : settings.toneType;

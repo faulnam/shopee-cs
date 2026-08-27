@@ -11,6 +11,21 @@
 
 
     <label>
+      Server Backend API
+      <select id="serverEnv">
+        <option value="https://shopee.cs.norapadel.my.id">Online (shopee.cs.norapadel.my.id)</option>
+        <option value="http://shopee-cs.test">Local Laragon (http://shopee-cs.test)</option>
+        <option value="http://127.0.0.1:8000">Local Artisan (http://127.0.0.1:8000)</option>
+        <option value="custom">Custom URL...</option>
+      </select>
+    </label>
+
+    <label id="customServerContainer" style="display: none;">
+      URL Server Custom
+      <input type="text" id="customServerUrl" placeholder="http://127.0.0.1:8000" />
+    </label>
+
+    <label>
       Gaya Bahasa
       <select id="toneType">
         <!-- Will be populated by JS -->

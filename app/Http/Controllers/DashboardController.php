@@ -128,6 +128,12 @@ class DashboardController extends Controller
         return back()->with('success', "Produk \"{$name}\" berhasil dihapus!");
     }
 
+    public function truncateProducts()
+    {
+        Product::truncate();
+        return back()->with('success', 'Semua data produk berhasil dibersihkan!');
+    }
+
     // =========================================================================
     // SYSTEM PROMPT
     // =========================================================================

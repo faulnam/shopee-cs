@@ -20,6 +20,7 @@ Route::middleware(['admin_auth'])->prefix('dashboard')->name('dashboard.')->grou
     
     Route::get('/products', [DashboardController::class, 'products'])->name('products');
     Route::put('/products/{product}', [DashboardController::class, 'updateProduct'])->name('products.update');
+    Route::delete('/products/clear-all', [DashboardController::class, 'truncateProducts'])->name('products.clearAll');
     Route::delete('/products/{product}', [DashboardController::class, 'deleteProduct'])->name('products.destroy');
     
     Route::get('/prompt', [DashboardController::class, 'prompt'])->name('prompt');

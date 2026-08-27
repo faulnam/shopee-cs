@@ -6,7 +6,12 @@
   "permissions": ["storage", "activeTab", "scripting", "tabs"],
   "host_permissions": [
     "https://seller.shopee.co.id/*",
-    "https://shopee.cs.norapadel.my.id/*"
+    "https://shopee.cs.norapadel.my.id/*",
+    "http://shopee-cs.test/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -4,6 +4,8 @@
 
 const DEFAULT_SETTINGS = {
   autoReplyEnabled: false,
+  serverEnv: "https://shopee.cs.norapadel.my.id",
+  customServerUrl: "http://127.0.0.1:8000",
   toneType: "ramah",
   customTone: "",
   replySpeed: "normal",

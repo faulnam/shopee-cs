@@ -9,9 +9,20 @@
             <h2 class="text-lg font-semibold text-white">Daftar Produk</h2>
             <p class="text-gray-400 text-sm mt-1">Data produk yang disinkronkan dari Shopee. AI akan menggunakan data ini.</p>
         </div>
-        <span class="text-sm px-3 py-1 bg-[#2a2a2a] rounded-full text-gray-300 border border-[#333]">
-            Total: {{ $products->total() }} Produk
-        </span>
+        <div class="flex items-center gap-3">
+            @if($products->total() > 0)
+            <form action="{{ route('dashboard.products.clearAll') }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin menghapus SEMUA data produk? (Data dapat disinkronkan kembali dari Shopee)')">
+                @csrf
+                @method('DELETE')
+                <button type="submit" class="px-3 py-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Bersihkan Semua
+                </button>
+            </form>
+            @endif
+            <span class="text-sm px-3 py-1 bg-[#2a2a2a] rounded-full text-gray-300 border border-[#333]">
+                Total: {{ $products->total() }} Produk
+            </span>
+        </div>
     </div>
 
     <div class="overflow-x-auto flex-1">
@@ -48,18 +59,32 @@
                             </div>
                             
                             @if(is_array($product->varian_tersedia) && count($product->varian_tersedia) > 0)
-                            <div class="mt-3 hidden group-hover:block bg-[#1a1a1a] rounded-lg border border-[#333] p-3 shadow-lg absolute z-50">
+                            <div class="mt-3 hidden group-hover:block bg-[#1a1a1a] rounded-lg border border-[#333] p-3 shadow-lg absolute z-50 min-w-[280px]">
                                 <p class="text-xs font-semibold text-gray-400 mb-2">Detail Variasi:</p>
                                 <div class="space-y-2 max-h-48 overflow-y-auto pr-2">
                                     @foreach($product->varian_tersedia as $var)
+                                    @php
+                                        $vNama = is_string($var) ? $var : ($var['nama'] ?? 'Unknown');
+                                        $vStok = is_array($var) ? ($var['stok'] ?? 0) : 0;
+                                        $vHarga = is_array($var) ? (float)($var['harga'] ?? $var['harga_normal'] ?? 0) : 0;
+                                        $vNormal = is_array($var) ? (float)($var['harga_normal'] ?? $vHarga) : $vHarga;
+                                        $vDiskon = is_array($var) && isset($var['harga_diskon']) && $var['harga_diskon'] !== null ? (float)$var['harga_diskon'] : null;
+                                    @endphp
                                     <div class="flex justify-between items-center text-sm bg-[#121212] p-2 rounded border border-[#2a2a2a] gap-4">
                                         <div class="flex items-center gap-2">
                                             <span class="w-2 h-2 rounded-full bg-[#ee4d2d]"></span>
-                                            <span class="text-gray-300">{{ is_string($var) ? $var : ($var['nama'] ?? 'Unknown') }}</span>
+                                            <span class="text-gray-300">{{ $vNama }}</span>
                                         </div>
-                                        <div class="flex gap-4 text-xs">
-                                            <span class="text-gray-400">Stok: <span class="text-white">{{ is_array($var) ? ($var['stok'] ?? 0) : '-' }}</span></span>
-                                            <span class="text-[#ee4d2d] font-medium whitespace-nowrap">Rp {{ number_format(is_array($var) ? ($var['harga'] ?? 0) : 0, 0, ',', '.') }}</span>
+                                        <div class="flex items-center gap-3 text-xs">
+                                            <span class="text-gray-400">Stok: <span class="text-white">{{ $vStok }}</span></span>
+                                            @if($vDiskon && $vDiskon > 0 && $vDiskon < $vNormal)
+                                                <div class="text-right">
+                                                    <span class="text-[#ee4d2d] font-medium whitespace-nowrap">Rp {{ number_format($vDiskon, 0, ',', '.') }}</span>
+                                                    <span class="text-gray-500 line-through block text-[10px]">Rp {{ number_format($vNormal, 0, ',', '.') }}</span>
+                                                </div>
+                                            @else
+                                                <span class="text-white font-medium whitespace-nowrap">Rp {{ number_format($vHarga > 0 ? $vHarga : $vNormal, 0, ',', '.') }}</span>
+                                            @endif
                                         </div>
                                     </div>
                                     @endforeach
@@ -72,11 +97,32 @@
                         <span class="px-2 py-1 bg-[#2a2a2a] rounded text-xs text-gray-300">{{ $product->kategori ?: 'Uncategorized' }}</span>
                     </td>
                     <td class="px-6 py-4 text-right">
-                        @if($product->harga_diskon)
-                            <div class="text-[#ee4d2d] font-medium">Rp {{ number_format($product->harga_diskon, 0, ',', '.') }}</div>
-                            <div class="text-xs text-gray-500 line-through">Rp {{ number_format($product->harga_normal, 0, ',', '.') }}</div>
+                        @php
+                            $dispNormal = (float)$product->harga_normal;
+                            $dispDiskon = $product->harga_diskon !== null ? (float)$product->harga_diskon : null;
+
+                            // Fallback jika harga parent 0 tapi variasi punya harga
+                            if ($dispNormal <= 0 && is_array($product->varian_tersedia) && count($product->varian_tersedia) > 0) {
+                                foreach ($product->varian_tersedia as $var) {
+                                    if (is_array($var)) {
+                                        $vN = (float)($var['harga_normal'] ?? $var['harga'] ?? 0);
+                                        $vD = isset($var['harga_diskon']) && $var['harga_diskon'] !== null ? (float)$var['harga_diskon'] : null;
+                                        if ($vN > 0 || ($vD !== null && $vD > 0)) {
+                                            $dispNormal = $vN > 0 ? $vN : (float)$vD;
+                                            $dispDiskon = $vD;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        @endphp
+                        @if($dispDiskon && $dispDiskon > 0 && $dispDiskon < $dispNormal)
+                            <div class="text-[#ee4d2d] font-medium">Rp {{ number_format($dispDiskon, 0, ',', '.') }}</div>
+                            <div class="text-xs text-gray-500 line-through">Rp {{ number_format($dispNormal, 0, ',', '.') }}</div>
+                        @elseif($dispNormal > 0)
+                            <div class="text-white font-medium">Rp {{ number_format($dispNormal, 0, ',', '.') }}</div>
                         @else
-                            <div class="text-white font-medium">Rp {{ number_format($product->harga_normal, 0, ',', '.') }}</div>
+                            <div class="text-gray-400 font-medium">Rp 0</div>
                         @endif
                     </td>
                     <td class="px-6 py-4 text-center">
